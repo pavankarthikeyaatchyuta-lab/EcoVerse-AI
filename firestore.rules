@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      // Users can only read and write their own profile
+      allow read, write: if isOwner(userId);
+      
+      // Quests Sub-collection
+      match /quests/{questId} {
+        // Users can read and update their own quests
+        allow read, write: if isOwner(userId);
+      }
+      
+      // Coach Chats Sub-collection
+      match /coach_chats/{messageId} {
+        // Users can read and append their own chat history
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}

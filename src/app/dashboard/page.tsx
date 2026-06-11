@@ -8,6 +8,7 @@ import CoachModal from '@/components/CoachModal';
 import QuestCard from '@/components/QuestCard';
 import ConsequenceCard from '@/components/ConsequenceCard';
 import FutureWorldVisual from '@/components/FutureWorldVisual';
+import Animated3DBackground from '@/components/Animated3DBackground';
 
 export default function Dashboard() {
   const { profile, stats, worldState, consequences, preferences, toggleHighContrast, toggleEli10Mode } = useStore();
@@ -50,8 +51,9 @@ export default function Dashboard() {
   if (!profile) return null;
 
   return (
-    <div className={`min-h-screen p-4 md:p-8 transition-colors ${preferences.highContrast ? 'bg-black text-white' : 'bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50'}`}>
-      <header className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 space-y-4 sm:space-y-0">
+    <div className={`relative isolate min-h-screen overflow-hidden p-4 md:p-8 transition-colors ${preferences.highContrast ? 'bg-black text-white' : 'bg-slate-950 text-slate-50'}`}>
+      <Animated3DBackground />
+      <header className="relative z-10 max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 space-y-4 sm:space-y-0">
         <div>
           <h1 className="text-3xl font-bold">Your Future City</h1>
           <p className="opacity-70">{stats.currentStreak} Day Streak</p>
@@ -87,7 +89,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main className="relative z-10 max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           {/* Today's Carbon Reflection Banner */}
           <div className={`p-4 rounded-xl flex items-center space-x-3 shadow-sm border ${preferences.highContrast ? 'border-white' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800'}`}>

@@ -89,7 +89,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="relative z-10 max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main id="main-content" className="relative z-10 max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           {/* Today's Carbon Reflection Banner */}
           <div className={`p-4 rounded-xl flex items-center space-x-3 shadow-sm border ${preferences.highContrast ? 'border-white' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800'}`}>

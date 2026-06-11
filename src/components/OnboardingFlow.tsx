@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { MapPin, Utensils, Car, Zap, ArrowRight, Loader2 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,7 @@ export default function OnboardingFlow() {
   const [isGenerating, setIsGenerating] = useState(false);
   const setProfile = useStore((state) => state.setProfile);
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
 
   const handleNext = async () => {
     if (currentStep < steps.length - 1) {
@@ -99,10 +100,10 @@ export default function OnboardingFlow() {
         <AnimatePresence mode="wait">
           <motion.div
             key={currentStep}
-            initial={{ opacity: 0, x: 20 }}
+            initial={shouldReduceMotion ? false : { opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.3 }}
             className="space-y-6"
           >
             <div className="flex items-center space-x-4 mb-6">

@@ -14,6 +14,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="antialiased overflow-x-hidden text-slate-900 bg-slate-950 dark:bg-slate-950 dark:text-slate-50">
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
         {children}
       </body>
     </html>

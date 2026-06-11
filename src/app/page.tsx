@@ -3,7 +3,7 @@ import Animated3DBackground from '@/components/Animated3DBackground';
 
 export default function Home() {
   return (
-    <main className="relative isolate min-h-screen overflow-hidden bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
+    <main id="main-content" className="relative isolate min-h-screen overflow-hidden bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
       <Animated3DBackground />
       <div className="relative z-10 max-w-4xl w-full mx-auto space-y-12">
         <div className="text-center space-y-4">

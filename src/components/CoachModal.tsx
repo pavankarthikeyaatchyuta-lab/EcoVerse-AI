@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { X, Send, Leaf, Mic, MicOff, Volume2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 
 export default function CoachModal({ onClose }: { onClose: () => void }) {
@@ -13,6 +13,7 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
   
   const addConsequence = useStore(state => state.addConsequence);
   const updateHealthScore = useStore(state => state.updateHealthScore);
@@ -103,17 +104,17 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex justify-end z-50 p-4" aria-modal="true" role="dialog">
+    <div className="fixed inset-0 bg-slate-900/50 flex justify-end z-50 p-4" aria-modal="true" role="dialog" aria-labelledby="coach-title">
       <motion.div 
-        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 50, scale: 0.9 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 50, scale: 0.9 }}
+        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 50, scale: 0.9 }}
         className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[80vh] mt-auto border border-slate-200 dark:border-slate-800"
       >
         <div className="bg-green-500 text-white p-4 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            <Leaf className="w-5 h-5" />
-            <h3 className="font-bold text-lg">AI Carbon Coach</h3>
+            <Leaf className="w-5 h-5" aria-hidden="true" />
+            <h3 id="coach-title" className="font-bold text-lg">AI Carbon Coach</h3>
           </div>
           <div className="flex items-center space-x-2">
             {isSpeaking && <Volume2 className="w-5 h-5 animate-pulse" aria-label="Speaking" />}

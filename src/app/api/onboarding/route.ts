@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
-
-const rateLimitMap = new Map<string, number>();
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+import { ai, GEMINI_MODEL } from '@/lib/gemini';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const OnboardingResponseSchema = z.object({
   narrative: z.string(),
@@ -11,12 +9,6 @@ const OnboardingResponseSchema = z.object({
 });
 
 async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not defined in the environment variables.");
-  }
-  const ai = new GoogleGenAI({ apiKey });
-
   for (let i = 0; i < retries; i++) {
     try {
       const response = await ai.models.generateContent({
@@ -46,10 +38,9 @@ async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get('x-forwarded-for') || 'anonymous';
-    const now = Date.now();
-    const lastRequest = rateLimitMap.get(ip);
-    
-    if (lastRequest && (now - lastRequest) < 2000) {
+    const rateLimit = await checkRateLimit({ identifier: ip, scope: 'onboarding', windowMs: 2000 });
+
+    if (!rateLimit.allowed) {
       // Don't error out on rate limit during onboarding, just use fallback
       return NextResponse.json({
         worldState: {
@@ -59,8 +50,6 @@ export async function POST(req: Request) {
         }
       });
     }
-    rateLimitMap.set(ip, now);
-
     const body = await req.json();
     const { profile } = body;
 

@@ -1,10 +1,11 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 export default function FutureWorldVisual() {
   const healthScore = useStore((state) => state.stats.healthScore);
+  const shouldReduceMotion = useReducedMotion();
 
   // Determine visual states based on healthScore (0 - 100)
   const isLow = healthScore < 40;
@@ -29,7 +30,7 @@ export default function FutureWorldVisual() {
     <div className={`relative w-full h-64 rounded-2xl overflow-hidden transition-colors duration-1000 ${skyColor}`}>
       {/* Sun / Smog */}
       <motion.div 
-        animate={{ 
+        animate={shouldReduceMotion ? undefined : { 
           backgroundColor: isHigh ? '#FDB813' : isLow ? '#94a3b8' : '#fcd34d',
           scale: isHigh ? 1 : isLow ? 1.5 : 1.2,
           filter: isLow ? 'blur(20px)' : 'blur(2px)'
@@ -52,7 +53,7 @@ export default function FutureWorldVisual() {
         {/* Trees */}
         <div className="absolute bottom-4 left-1/4 flex space-x-8">
           <motion.div 
-            animate={{ 
+            animate={shouldReduceMotion ? undefined : { 
               backgroundColor: isLow ? 'transparent' : '#22c55e',
               height: isLow ? 0 : 32,
               opacity: isLow ? 0 : 1
@@ -60,7 +61,7 @@ export default function FutureWorldVisual() {
             className="w-8 rounded-t-full transition-all duration-1000 origin-bottom"
           />
           <motion.div 
-            animate={{ 
+            animate={shouldReduceMotion ? undefined : { 
               backgroundColor: isLow ? 'transparent' : '#16a34a',
               height: isLow ? 0 : 40,
               opacity: isHigh ? 1 : 0

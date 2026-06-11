@@ -1,11 +1,13 @@
 import { ConsequenceCard as ConsequenceCardType } from '@/store/useStore';
-import { AlertTriangle, ArrowRight, TrendingDown } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { AlertTriangle, TrendingDown } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 
 export default function ConsequenceCard({ card }: { card: ConsequenceCardType }) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
+      initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm overflow-hidden relative"
     >

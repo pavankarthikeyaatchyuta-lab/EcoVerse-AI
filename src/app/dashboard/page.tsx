@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
+import type { Quest } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
 import { MessageSquare, Leaf, Trophy, Activity, Moon, Sun, Baby } from 'lucide-react';
 import CoachModal from '@/components/CoachModal';
@@ -14,7 +15,7 @@ export default function Dashboard() {
   const { profile, stats, worldState, consequences, preferences, toggleHighContrast, toggleEli10Mode } = useStore();
   const router = useRouter();
   const [isCoachOpen, setIsCoachOpen] = useState(false);
-  const [quests, setQuests] = useState<any[]>([]);
+  const [quests, setQuests] = useState<Quest[]>([]);
   const [isLoadingQuests, setIsLoadingQuests] = useState(true);
 
   // Calculate today's carbon reflection

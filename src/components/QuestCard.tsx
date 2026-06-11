@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
+import type { Quest } from '@/store/useStore';
 import { CheckCircle2 } from 'lucide-react';
 
-export default function QuestCard({ quest }: { quest: any }) {
+export default function QuestCard({ quest }: { quest: Quest }) {
   const [completed, setCompleted] = useState(false);
   const updateHealthScore = useStore(state => state.updateHealthScore);
 

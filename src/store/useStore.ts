@@ -37,6 +37,12 @@ export interface Achievement {
   unlockedAt: number;
 }
 
+export interface Quest {
+  title: string;
+  description: string;
+  xpReward: number;
+}
+
 interface AppState {
   profile: UserProfile | null;
   stats: { healthScore: number; currentStreak: number; lastLogin: number | null };

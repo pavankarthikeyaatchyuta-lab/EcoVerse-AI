@@ -2,6 +2,7 @@
 
 import { ai } from '@/lib/gemini';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getCachedAiPayload, setCachedAiPayload } from '@/lib/ai-cache';
 import { POST as onboardingPOST } from '../onboarding/route';
 import { POST as coachPOST } from '../coach/chat/route';
 import { POST as futureMessagePOST } from '../future-message/route';
@@ -29,6 +30,8 @@ jest.mock('@/lib/ai-cache', () => ({
 const mockedGenerateContent = ai.models.generateContent as jest.Mock;
 const mockedGenerateContentStream = ai.models.generateContentStream as jest.Mock;
 const mockedCheckRateLimit = checkRateLimit as jest.Mock;
+const mockedGetCachedAiPayload = getCachedAiPayload as jest.Mock;
+const mockedSetCachedAiPayload = setCachedAiPayload as jest.Mock;
 const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
 describe('API routes', () => {
@@ -36,7 +39,11 @@ describe('API routes', () => {
     mockedGenerateContent.mockReset();
     mockedGenerateContentStream.mockReset();
     mockedCheckRateLimit.mockReset();
+    mockedGetCachedAiPayload.mockReset();
+    mockedSetCachedAiPayload.mockReset();
     mockedCheckRateLimit.mockResolvedValue({ allowed: true, source: 'memory' });
+    mockedGetCachedAiPayload.mockResolvedValue(null);
+    mockedSetCachedAiPayload.mockResolvedValue(undefined);
   });
 
   afterAll(() => {
@@ -330,5 +337,44 @@ describe('API routes', () => {
 
     expect(response.status).toBe(400);
     expect(payload.error).toBe('Invalid payload');
+  });
+
+  it('returns cached quests without calling Gemini', async () => {
+    mockedGetCachedAiPayload.mockResolvedValueOnce({
+      quests: [
+        {
+          title: 'Cached low-carbon commute',
+          description: 'Use the cached lower-carbon travel plan.',
+          xpReward: 80,
+        },
+      ],
+    });
+
+    const response = await questsPOST(
+      new Request('http://localhost/api/quests/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile: {
+            location: 'Seattle, WA',
+            lifestyleBaseline: {
+              diet: 'Vegan',
+              commute: 'Public Transit',
+              energy: '100% Renewable',
+            },
+          },
+          stats: {
+            healthScore: 70,
+            currentStreak: 2,
+          },
+        }),
+      })
+    );
+
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.quests[0].title).toBe('Cached low-carbon commute');
+    expect(mockedGenerateContent).not.toHaveBeenCalled();
+    expect(mockedSetCachedAiPayload).not.toHaveBeenCalled();
   });
 });

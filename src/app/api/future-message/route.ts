@@ -2,20 +2,56 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-// Basic in-memory rate limiting (Note: in production across multiple instances, use Redis/Firestore)
 const rateLimitMap = new Map<string, number>();
 
 const RequestSchema = z.object({
-  location: z.string().min(2).max(100),
-  recentChoice: z.string().min(2).max(200),
-  healthScore: z.number().min(0).max(100),
+  profile: z.object({
+    location: z.string()
+  }),
+  stats: z.object({
+    healthScore: z.number(),
+    currentStreak: z.number()
+  })
 });
+
+const FutureMessageResponseSchema = z.object({
+  message: z.string(),
+  urgency: z.enum(['low', 'medium', 'high', 'critical'])
+});
+
+async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not defined.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
+
+      const data = JSON.parse(response.text || '{}');
+      const validated = FutureMessageResponseSchema.safeParse(data);
+      if (validated.success) return validated.data;
+    } catch (e) {
+      console.error("Future message parse failed on attempt", i, e);
+    }
+  }
+  // Fallback safe response
+  return {
+    message: "Signal lost from 2075. Your present choices are clouding the timeline.",
+    urgency: "medium"
+  };
+}
 
 export async function POST(req: Request) {
   try {
-    // 1. Rate Limiting Check (by IP)
     const ip = req.headers.get('x-forwarded-for') || 'anonymous';
     const now = Date.now();
     const lastRequest = rateLimitMap.get(ip);
@@ -25,7 +61,6 @@ export async function POST(req: Request) {
     }
     rateLimitMap.set(ip, now);
 
-    // 2. Parse & Validate Body
     const body = await req.json();
     const result = RequestSchema.safeParse(body);
     
@@ -33,30 +68,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid payload', details: result.error.format() }, { status: 400 });
     }
 
-    const { location, recentChoice, healthScore } = result.data;
+    const { profile, stats } = result.data;
 
-    // 3. Gemini Generation
+    const stateDesc = stats.healthScore >= 70 ? 'thriving and green' 
+                    : stats.healthScore < 40 ? 'polluted and struggling' 
+                    : 'in a delicate balance';
+
     const prompt = `
-      You are the user's Future Self living in ${location} in the year 2075.
-      The current world health score timeline is ${healthScore}/100.
-      The user just made this choice: "${recentChoice}".
-      
-      Write a short, highly personalized 2-sentence message from their future self.
-      If healthScore > 70, be grateful for their choice protecting the local environment in ${location}.
-      If healthScore < 40, warn them about the specific local consequences in ${location} if they don't change.
-      Make it emotional and urgent. Do not sound like a robot.
+      You are the user's Future Self, writing from the year 2075 in ${profile.location}.
+      Based on the user's current timeline trajectory, their future world is ${stateDesc} (Health Score: ${stats.healthScore}/100).
+      They have maintained a ${stats.currentStreak} day streak of logging eco-actions.
+
+      Write a short, 2-sentence message to your past self. 
+      If the world is thriving, express gratitude. If it is struggling, express urgent warning but hope.
+      Make it deeply personal to ${profile.location}.
+
+      Respond strictly in this JSON format:
+      {
+        "message": "The text of the message",
+        "urgency": "low | medium | high | critical"
+      }
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-    });
+    const data = await generateWithRetry(prompt);
 
-    const message = response.text || 'The transmission from the future was lost...';
-
-    return NextResponse.json({ message });
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Future Message API Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Future Message Error:', error);
+    // Return a guaranteed 200 fallback so the UI never crashes
+    return NextResponse.json({
+      message: "Connection to 2075 established, but data is corrupted. Please ensure your API keys are configured.",
+      urgency: "medium"
+    });
   }
 }

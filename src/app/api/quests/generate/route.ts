@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const rateLimitMap = new Map<string, number>();
 
 const RequestSchema = z.object({
@@ -30,24 +29,30 @@ const QuestsResponseSchema = z.object({
 });
 
 async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
-  for (let i = 0; i < retries; i++) {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      }
-    });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not defined.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
 
+  for (let i = 0; i < retries; i++) {
     try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
+
       const data = JSON.parse(response.text || '{}');
       const validated = QuestsResponseSchema.safeParse(data);
       if (validated.success) return validated.data;
     } catch (e) {
-      console.error("Quest Parse failed on attempt", i);
+      console.error("Quest Parse failed on attempt", i, e);
     }
   }
-  // Fallback safe response if Gemini keeps failing
+  // Fallback safe response
   return {
     quests: [
       {
@@ -111,6 +116,15 @@ export async function POST(req: Request) {
     return NextResponse.json(data);
   } catch (error) {
     console.error('Quest Generation Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    // Return a guaranteed 200 fallback so UI doesn't crash
+    return NextResponse.json({
+      quests: [
+        {
+          title: "Setup API Keys",
+          description: "Ensure your GEMINI_API_KEY is configured in Cloud Run to receive personalized quests.",
+          xpReward: 10
+        }
+      ]
+    });
   }
 }

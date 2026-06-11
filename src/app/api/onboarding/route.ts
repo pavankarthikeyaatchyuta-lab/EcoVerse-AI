@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 
-// Initialize the Gemini AI client
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const rateLimitMap = new Map<string, number>();
 
 const OnboardingResponseSchema = z.object({
@@ -12,6 +10,12 @@ const OnboardingResponseSchema = z.object({
 });
 
 async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not defined in the environment variables.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
+
   for (let i = 0; i < retries; i++) {
     try {
       const response = await ai.models.generateContent({
@@ -45,7 +49,14 @@ export async function POST(req: Request) {
     const lastRequest = rateLimitMap.get(ip);
     
     if (lastRequest && (now - lastRequest) < 2000) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+      // Don't error out on rate limit during onboarding, just use fallback
+      return NextResponse.json({
+        worldState: {
+          narrative: "You're moving too fast! The future is still rendering...",
+          imageUrl: null,
+          cssState: 'neutral'
+        }
+      });
     }
     rateLimitMap.set(ip, now);
 
@@ -56,7 +67,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing profile data' }, { status: 400 });
     }
 
-    // Step 1: Analyze the profile and generate a narrative and an image prompt
     const prompt = `
       You are the EcoVerse Oracle. The user lives in ${profile.location}.
       Their current lifestyle consists of:
@@ -87,7 +97,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('Onboarding Generation Error:', error);
-    // Even if it completely fails at network level, return a fallback so user isn't stuck
+    // Return a guaranteed 200 OK fallback if Gemini completely fails (e.g., missing API key on Cloud Run)
     return NextResponse.json({
       worldState: {
         narrative: "The future of your city remains uncertain. Small choices today will ripple into tomorrow.",

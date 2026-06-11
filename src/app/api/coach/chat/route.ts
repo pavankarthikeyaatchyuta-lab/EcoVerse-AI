@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const rateLimitMap = new Map<string, number>();
 
 const ChatMessageSchema = z.object({
@@ -16,7 +15,6 @@ const RequestSchema = z.object({
   eli10Mode: z.boolean().optional()
 });
 
-// Zod schema for the expected Gemini output
 const GeminiResponseSchema = z.object({
   choice: z.string(),
   impact: z.string(),
@@ -27,31 +25,38 @@ const GeminiResponseSchema = z.object({
 });
 
 async function generateWithRetry(contents: any, systemPrompt: string, retries = 2): Promise<any> {
-  for (let i = 0; i < retries; i++) {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: contents,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-      }
-    });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not defined.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
 
+  for (let i = 0; i < retries; i++) {
     try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: contents,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json',
+        }
+      });
+
       const data = JSON.parse(response.text || '{}');
       const validated = GeminiResponseSchema.safeParse(data);
       if (validated.success) return validated.data;
     } catch (e) {
-      console.error("Parse failed on attempt", i);
+      console.error("Parse failed on attempt", i, e);
     }
   }
-  // Fallback safe response if Gemini keeps failing
+  
+  // Fallback
   return {
     choice: "Your recent action",
     impact: "Unknown CO2 impact",
     equivalent: ["Equivalent to breathing for a day"],
     alternative: "Consider local or plant-based alternatives",
-    suggestion: "I had trouble analyzing that precisely, but trying to reduce transport and meat consumption always helps!",
+    suggestion: "I had trouble analyzing that precisely, but reducing transport and meat consumption always helps!",
     impactReductionPercentage: 0
   };
 }
@@ -108,6 +113,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ response: data });
   } catch (error) {
     console.error('Coach Chat Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    // Return a guaranteed 200 fallback so the UI never crashes
+    return NextResponse.json({ 
+      response: {
+        choice: "Error processing",
+        impact: "Unknown",
+        equivalent: ["API Error"],
+        alternative: "Make sure your API keys are configured.",
+        suggestion: "There was a network error. Ensure GEMINI_API_KEY is set in Cloud Run.",
+        impactReductionPercentage: 0
+      }
+    });
   }
 }

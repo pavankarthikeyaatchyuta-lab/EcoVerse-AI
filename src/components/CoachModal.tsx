@@ -58,6 +58,8 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
     window.speechSynthesis.speak(utterance);
   };
 
+  const latestCoachMessage = [...messages].reverse().find((message) => message.role === 'coach')?.text || '';
+
   const handleSend = async () => {
     if (!input.trim()) return;
     
@@ -124,7 +126,11 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" role="log" aria-live="polite">
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {isLoading ? 'Loading AI response' : latestCoachMessage}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" role="log" aria-live="polite" aria-relevant="additions text">
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] p-3 rounded-2xl ${msg.role === 'user' ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 rounded-tr-none' : 'bg-green-50 dark:bg-green-900/20 text-slate-800 dark:text-slate-200 rounded-tl-none border border-green-100 dark:border-green-800'}`}>

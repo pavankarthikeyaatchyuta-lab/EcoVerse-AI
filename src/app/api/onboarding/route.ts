@@ -1,11 +1,54 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { z } from 'zod';
 
 // Initialize the Gemini AI client
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const rateLimitMap = new Map<string, number>();
+
+const OnboardingResponseSchema = z.object({
+  narrative: z.string(),
+  imagePrompt: z.string().optional(),
+});
+
+async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
+      
+      const contentText = response.text || '{}';
+      const data = JSON.parse(contentText);
+      const validated = OnboardingResponseSchema.safeParse(data);
+      if (validated.success) return validated.data;
+    } catch (e) {
+      console.error("Failed to parse Gemini response on attempt", i, e);
+    }
+  }
+  
+  // Fallback safe response
+  return {
+    narrative: "A sprawling metropolis where technology and nature are attempting to find balance. The air hums with the sound of electric transit, but the horizon is clouded by the consequences of past industrial choices. It's a world in flux, waiting for decisive action.",
+    imagePrompt: "A futuristic city skyline with a mix of green tech and pollution smog."
+  };
+}
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+    const now = Date.now();
+    const lastRequest = rateLimitMap.get(ip);
+    
+    if (lastRequest && (now - lastRequest) < 2000) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+    rateLimitMap.set(ip, now);
+
     const body = await req.json();
     const { profile } = body;
 
@@ -32,35 +75,25 @@ export async function POST(req: Request) {
       }
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      }
-    });
-
-    const contentText = response.text || '{}';
-    let generatedData;
-    try {
-      generatedData = JSON.parse(contentText);
-    } catch (e) {
-      console.error("Failed to parse Gemini response:", contentText);
-      throw new Error("Invalid response format from Gemini");
-    }
-
-    // Here we would normally call an Image Generation API with generatedData.imagePrompt
-    // For this MVP, we will return a placeholder or null, and handle the image client-side or wait for Phase 3.
+    const generatedData = await generateWithRetry(prompt);
 
     return NextResponse.json({
       worldState: {
         narrative: generatedData.narrative,
-        imageUrl: null, // To be implemented with Cloud Storage & Image Gen
+        imageUrl: null, 
+        cssState: 'neutral'
       }
     });
 
   } catch (error: any) {
     console.error('Onboarding Generation Error:', error);
-    return NextResponse.json({ error: 'Failed to generate world simulation' }, { status: 500 });
+    // Even if it completely fails at network level, return a fallback so user isn't stuck
+    return NextResponse.json({
+      worldState: {
+        narrative: "The future of your city remains uncertain. Small choices today will ripple into tomorrow.",
+        imageUrl: null,
+        cssState: 'neutral'
+      }
+    });
   }
 }

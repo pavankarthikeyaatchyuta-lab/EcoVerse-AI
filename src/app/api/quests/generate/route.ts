@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { ai, GEMINI_MODEL } from '@/lib/gemini';
+import { getCachedAiPayload, setCachedAiPayload } from '@/lib/ai-cache';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const RequestSchema = z.object({
@@ -26,6 +27,8 @@ const QuestsResponseSchema = z.object({
     xpReward: z.number()
   }))
 });
+
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 
 async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
   for (let i = 0; i < retries; i++) {
@@ -79,6 +82,28 @@ export async function POST(req: Request) {
     }
 
     const { profile } = result.data;
+    const cacheKeyParts = [
+      'quest-generate',
+      profile.location,
+      profile.lifestyleBaseline.diet,
+      profile.lifestyleBaseline.commute,
+      profile.lifestyleBaseline.energy,
+      result.data.stats.healthScore,
+      result.data.stats.currentStreak ?? 0,
+      result.data.stats.lastLogin ?? 0,
+    ];
+
+    const cachedQuests = await getCachedAiPayload<{
+      quests: Array<{
+        title: string;
+        description: string;
+        xpReward: number;
+      }>;
+    }>(cacheKeyParts, CACHE_TTL_MS);
+
+    if (cachedQuests) {
+      return NextResponse.json(cachedQuests);
+    }
 
     const prompt = `
       You are the EcoVerse AI Quest Master.
@@ -103,6 +128,7 @@ export async function POST(req: Request) {
     `;
 
     const data = await generateWithRetry(prompt);
+    await setCachedAiPayload(cacheKeyParts, data);
 
     return NextResponse.json(data);
   } catch (error) {

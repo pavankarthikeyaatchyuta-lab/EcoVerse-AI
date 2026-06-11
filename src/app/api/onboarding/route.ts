@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { ai, GEMINI_MODEL } from '@/lib/gemini';
+import { getCachedAiPayload, setCachedAiPayload } from '@/lib/ai-cache';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const OnboardingResponseSchema = z.object({
   narrative: z.string(),
   imagePrompt: z.string().optional(),
 });
+
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 
 async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
   for (let i = 0; i < retries; i++) {
@@ -57,6 +60,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing profile data' }, { status: 400 });
     }
 
+    const cacheKeyParts = [
+      'onboarding',
+      profile.location,
+      profile.lifestyleBaseline?.diet ?? '',
+      profile.lifestyleBaseline?.commute ?? '',
+      profile.lifestyleBaseline?.energy ?? '',
+    ];
+
+    const cachedWorldState = await getCachedAiPayload<{
+      worldState: {
+        narrative: string;
+        imageUrl: null;
+        cssState: 'neutral';
+      };
+    }>(cacheKeyParts, CACHE_TTL_MS);
+
+    if (cachedWorldState) {
+      return NextResponse.json(cachedWorldState);
+    }
+
     const prompt = `
       You are the EcoVerse Oracle. The user lives in ${profile.location}.
       Their current lifestyle consists of:
@@ -76,14 +99,17 @@ export async function POST(req: Request) {
     `;
 
     const generatedData = await generateWithRetry(prompt);
-
-    return NextResponse.json({
+    const response = {
       worldState: {
         narrative: generatedData.narrative,
-        imageUrl: null, 
-        cssState: 'neutral'
+        imageUrl: null,
+        cssState: 'neutral' as const
       }
-    });
+    };
+
+    await setCachedAiPayload(cacheKeyParts, response);
+
+    return NextResponse.json(response);
 
   } catch (error: any) {
     console.error('Onboarding Generation Error:', error);

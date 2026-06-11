@@ -18,6 +18,7 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
   const addConsequence = useStore(state => state.addConsequence);
   const updateHealthScore = useStore(state => state.updateHealthScore);
   const { eli10Mode } = useStore(state => state.preferences);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Speech Recognition setup
   const recognitionRef = useRef<any>(null);
@@ -38,6 +39,13 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
       recognitionRef.current.onend = () => setIsListening(false);
     }
   }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: shouldReduceMotion ? 'auto' : 'smooth',
+      block: 'end'
+    });
+  }, [messages, isLoading, shouldReduceMotion]);
 
   const toggleListening = () => {
     if (isListening) {
@@ -60,46 +68,165 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
 
   const latestCoachMessage = [...messages].reverse().find((message) => message.role === 'coach')?.text || '';
 
+  const parseSseBlock = (block: string) => {
+    const lines = block.split(/\r?\n/);
+    let eventName = 'message';
+    let data = '';
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith('data:')) {
+        data += line.slice(5).trim();
+      }
+    }
+
+    return { eventName, data };
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
     
     const userMsg = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    const requestHistory = messages;
+    const assistantIndex = requestHistory.length + 1;
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }, { role: 'coach', text: '' }]);
     setIsLoading(true);
 
     try {
       const res = await fetch('/api/coach/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, history: messages, eli10Mode })
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ message: userMsg, history: requestHistory, eli10Mode })
       });
-      const data = await res.json();
-      
-      if (data.response) {
-        const { choice, impact, equivalent, alternative, suggestion, impactReductionPercentage } = data.response;
-        
-        addConsequence({
-          choice,
-          impact,
-          equivalent: Array.isArray(equivalent) ? equivalent : [equivalent],
-          alternative,
-          impactReductionPercentage
-        });
 
-        if (impactReductionPercentage > 0) updateHealthScore(2);
+      const contentType = res.headers.get('content-type') || '';
 
-        setMessages(prev => [...prev, { role: 'coach', text: suggestion }]);
-        
-        // Auto Text-to-Speech the response
-        speakText(suggestion);
-        
+      if (!res.ok) {
+        const errorPayload = contentType.includes('application/json')
+          ? await res.json().catch(() => null)
+          : null;
+        throw new Error(errorPayload?.error || 'Request failed');
+      }
+
+      if (contentType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let streamedText = '';
+        let finalResponse: {
+          choice: string;
+          impact: string;
+          equivalent: string[];
+          alternative: string;
+          suggestion: string;
+          impactReductionPercentage: number;
+        } | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          let boundaryIndex = buffer.indexOf('\n\n');
+          while (boundaryIndex !== -1) {
+            const block = buffer.slice(0, boundaryIndex);
+            buffer = buffer.slice(boundaryIndex + 2);
+            boundaryIndex = buffer.indexOf('\n\n');
+
+            if (!block.trim()) continue;
+
+            const { eventName, data } = parseSseBlock(block);
+            if (!data) continue;
+
+            if (eventName === 'delta') {
+              const parsed = JSON.parse(data) as { text?: string };
+              if (!parsed.text) continue;
+              streamedText += parsed.text;
+              setMessages(prev => prev.map((message, index) => (
+                index === assistantIndex ? { ...message, text: streamedText } : message
+              )));
+            }
+
+            if (eventName === 'result') {
+              const parsed = JSON.parse(data) as {
+                response?: {
+                  choice: string;
+                  impact: string;
+                  equivalent: string[];
+                  alternative: string;
+                  suggestion: string;
+                  impactReductionPercentage: number;
+                };
+                assistantText?: string;
+              };
+
+              if (parsed.response) {
+                finalResponse = parsed.response;
+              }
+
+              if (!streamedText && parsed.assistantText) {
+                streamedText = parsed.assistantText;
+                setMessages(prev => prev.map((message, index) => (
+                  index === assistantIndex ? { ...message, text: streamedText } : message
+                )));
+              }
+            }
+          }
+        }
+
+        const response = finalResponse;
+        const finalText = streamedText.trim() || response?.suggestion || 'I am having trouble connecting right now.';
+
+        if (response) {
+          addConsequence({
+            choice: response.choice,
+            impact: response.impact,
+            equivalent: Array.isArray(response.equivalent) ? response.equivalent : [response.equivalent],
+            alternative: response.alternative,
+            impactReductionPercentage: response.impactReductionPercentage
+          });
+
+          if (response.impactReductionPercentage > 0) updateHealthScore(2);
+        }
+
+        setMessages(prev => prev.map((message, index) => (
+          index === assistantIndex ? { ...message, text: finalText } : message
+        )));
+
+        speakText(finalText);
       } else {
-        throw new Error("Invalid response");
+        const data = await res.json();
+
+        if (data.response) {
+          const { choice, impact, equivalent, alternative, suggestion, impactReductionPercentage } = data.response;
+
+          addConsequence({
+            choice,
+            impact,
+            equivalent: Array.isArray(equivalent) ? equivalent : [equivalent],
+            alternative,
+            impactReductionPercentage
+          });
+
+          if (impactReductionPercentage > 0) updateHealthScore(2);
+
+          setMessages(prev => prev.map((message, index) => (
+            index === assistantIndex ? { ...message, text: suggestion } : message
+          )));
+
+          speakText(suggestion);
+        } else {
+          throw new Error("Invalid response");
+        }
       }
     } catch (err) {
       console.error(err);
-      setMessages(prev => [...prev, { role: 'coach', text: 'Sorry, I am having trouble connecting right now.' }]);
+      setMessages(prev => prev.map((message, index) => (
+        index === assistantIndex ? { ...message, text: 'Sorry, I am having trouble connecting right now.' } : message
+      )));
     } finally {
       setIsLoading(false);
     }
@@ -138,6 +265,7 @@ export default function CoachModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           ))}
+          <div ref={messagesEndRef} />
           {isLoading && (
             <div className="flex justify-start">
               <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-2xl rounded-tl-none flex space-x-1">

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { ai, GEMINI_MODEL } from '@/lib/gemini';
+import { getCachedAiPayload, setCachedAiPayload } from '@/lib/ai-cache';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const RequestSchema = z.object({
@@ -17,6 +18,8 @@ const FutureMessageResponseSchema = z.object({
   message: z.string(),
   urgency: z.enum(['low', 'medium', 'high', 'critical'])
 });
+
+const CACHE_TTL_MS = 1000 * 60 * 60 * 12;
 
 async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
   for (let i = 0; i < retries; i++) {
@@ -60,6 +63,21 @@ export async function POST(req: Request) {
     }
 
     const { profile, stats } = result.data;
+    const cacheKeyParts = [
+      'future-message',
+      profile.location,
+      stats.healthScore,
+      stats.currentStreak,
+    ];
+
+    const cachedMessage = await getCachedAiPayload<{
+      message: string;
+      urgency: 'low' | 'medium' | 'high' | 'critical';
+    }>(cacheKeyParts, CACHE_TTL_MS);
+
+    if (cachedMessage) {
+      return NextResponse.json(cachedMessage);
+    }
 
     const stateDesc = stats.healthScore >= 70 ? 'thriving and green' 
                     : stats.healthScore < 40 ? 'polluted and struggling' 
@@ -82,6 +100,7 @@ export async function POST(req: Request) {
     `;
 
     const data = await generateWithRetry(prompt);
+    await setCachedAiPayload(cacheKeyParts, data);
 
     return NextResponse.json(data);
   } catch (error) {

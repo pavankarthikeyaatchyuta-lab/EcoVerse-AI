@@ -85,6 +85,10 @@ Live URL:
 
 https://ecoverse-ai-655808244864.asia-south1.run.app
 
+LinkedIn post:
+
+https://www.linkedin.com/posts/pavan-karthikeya-atchyuta-3a5040354_buildwithai-promptwarsvirtual-googleai-ugcPost-7470847484966207488-CwrI/?utm_source=share&utm_medium=member_desktop&rcm=ACoAAFhIRi0Bgd3lw3t73PozqDSMLW6jDLjPfL8
+
 ## Notes
 - Docker uses a standalone Next.js output.
 - The production image now runs on Node 22 Alpine.

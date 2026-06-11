@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 
 const rateLimitMap = new Map<string, number>();
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 const OnboardingResponseSchema = z.object({
   narrative: z.string(),
@@ -19,7 +20,7 @@ async function generateWithRetry(prompt: string, retries = 2): Promise<any> {
   for (let i = 0; i < retries; i++) {
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
